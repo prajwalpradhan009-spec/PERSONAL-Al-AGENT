@@ -76,37 +76,57 @@ class WebSocketEventBus:
 
 event_bus = WebSocketEventBus()
 
+async def telemetry_stream_worker():
+    """Background task streaming live telemetry metrics over WebSocket."""
+    while True:
+        try:
+            if event_bus.active_sockets:
+                telemetry = get_detailed_telemetry()
+                await event_bus.broadcast({
+                    "type": "telemetry",
+                    "data": telemetry
+                })
+        except Exception:
+            pass
+        await asyncio.sleep(1.5)
+
 def generate_founder_startup_greeting() -> str:
     """
     Generates dynamic voice greeting for Founder Prajjwal Pradhan with real-time telemetry stats.
     """
-    telemetry = get_detailed_telemetry()
-    cpu = telemetry["cpu"]["percent"]
-    ram = telemetry["memory"]["percent"]
-    gpu = telemetry.get("gpu")
-    
-    greeting = f"Welcome back, Founder Prajjwal. Core neural HUD is online. CPU is operating at {int(cpu)} percent, with {int(ram)} percent memory utilized."
-    if gpu and gpu.get("memory_used_mb"):
-        greeting += f" GPU VRAM utilization is at {gpu['memory_used_mb']} megabytes."
-    return greeting
+    try:
+        telemetry = get_detailed_telemetry()
+        cpu = int(telemetry["cpu"]["percent"])
+        ram = int(telemetry["memory"]["percent"])
+        gpu = telemetry.get("gpu")
+        
+        greeting = f"Welcome back, Founder Prajjwal. Core neural HUD is online. CPU is operating at {cpu} percent, with {ram} percent memory utilized."
+        if gpu and gpu.get("memory_used_mb"):
+            greeting += f" GPU VRAM utilization is at {gpu['memory_used_mb']} megabytes."
+        return greeting
+    except Exception:
+        return "Welcome back, Founder Prajjwal. Core neural HUD is online."
 
 def trigger_startup_voice_greeting():
     """Synthesizes and speaks startup greeting on local speakers using Kokoro TTS."""
-    config = load_config()
-    if not config.get("startup_voice_greeting", True):
-        return
-    voice = config.get("tts_voice", "af_heart")
-    speed = float(config.get("tts_speed", 1.0))
-    greeting = generate_founder_startup_greeting()
-    print(f"\n[🗣️ Startup Greeting] {greeting}\n")
-    speak_local(greeting, voice=voice, speed=speed)
+    try:
+        config = load_config()
+        if not config.get("startup_voice_greeting", True):
+            return
+        voice = config.get("tts_voice", "af_heart")
+        speed = float(config.get("tts_speed", 1.0))
+        greeting = generate_founder_startup_greeting()
+        print(f"\n[🗣️ Startup Greeting] {greeting}\n")
+        speak_local(greeting, voice=voice, speed=speed)
+    except Exception as e:
+        print(f"[⚠️] Startup voice greeting note: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: telemetry worker
     telemetry_task = asyncio.create_task(telemetry_stream_worker())
     
-    # Startup Voice Greeting for Founder Prajjwal
+    # Startup Voice Greeting for Founder Prajjwal (non-blocking thread)
     asyncio.create_task(asyncio.to_thread(trigger_startup_voice_greeting))
     
     yield
