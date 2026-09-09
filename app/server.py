@@ -1,88 +1,108 @@
+"""
+AI Voice Assistant - FastAPI Backend Server & WebSocket Event Bus
+Orchestrates Whisper STT, Kokoro TTS, Ollama Function Calling, Native App Launching, and 3D HUD WebSockets.
+"""
+
 import os
 import asyncio
 import base64
 from pathlib import Path
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, List, Set, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.core.config import load_config, save_config, AVAILABLE_VOICES, PERSONAS
-from app.core.telemetry import get_system_telemetry
-from app.core.llm_client import (
-    process_agent_turn, 
-    check_ollama_status, 
-    get_session, 
-    list_all_sessions
+from app.core.app_launcher import launch_application, close_application
+from app.core.task_automation import (
+    lock_workstation, 
+    get_detailed_telemetry, 
+    execute_web_search, 
+    execute_open_url, 
+    execute_shell_task
 )
-from app.core.tools import (
-    execute_shell_command, 
-    launch_app, 
-    open_web_search, 
-    take_note, 
-    list_workspace_files, 
-    get_system_summary
-)
+from app.core.function_calling import process_function_calling_turn, execute_structured_action
 from app.core.voice_engine import (
     synthesize_wav_bytes, 
     speak_local, 
     listen_and_transcribe_mic, 
-    transcribe_audio_stream
+    transcribe_audio_stream,
+    free_vram
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# WebSockets Connection Manager
-class ConnectionManager:
+# ==========================================
+# WEBSOCKET EVENT BUS
+# ==========================================
+class WebSocketEventBus:
+    """Central Event Bus for broadcasting telemetry, agent states, and action execution confirmations."""
     def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
+        self.active_sockets: Set[WebSocket] = set()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.add(websocket)
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.active_sockets.add(ws)
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.discard(websocket)
+    def disconnect(self, ws: WebSocket):
+        self.active_sockets.discard(ws)
 
-    async def broadcast(self, message: Dict[str, Any]):
-        for connection in list(self.active_connections):
+    async def broadcast(self, payload: Dict[str, Any]):
+        for ws in list(self.active_sockets):
             try:
-                await connection.send_json(message)
+                await ws.send_json(payload)
             except Exception:
-                self.active_connections.discard(connection)
+                self.active_sockets.discard(ws)
 
-manager = ConnectionManager()
+    async def emit_state(self, state: str):
+        """Emits agent state transition ('idle', 'listening', 'thinking', 'executing', 'speaking')."""
+        await self.broadcast({
+            "type": "agent_state",
+            "state": state
+        })
 
-# Background telemetry broadcaster
-async def telemetry_worker():
+    async def emit_action_event(self, action_type: str, status: str, details: Dict[str, Any]):
+        """Emits structured action execution confirmation."""
+        await self.broadcast({
+            "type": "action_execution",
+            "action": action_type,
+            "status": status,
+            "details": details
+        })
+
+event_bus = WebSocketEventBus()
+
+# Background telemetry worker
+async def telemetry_stream_worker():
     while True:
         try:
-            if manager.active_connections:
-                telemetry = get_system_telemetry()
-                await manager.broadcast({
+            if event_bus.active_sockets:
+                telemetry = get_detailed_telemetry()
+                await event_bus.broadcast({
                     "type": "telemetry",
                     "data": telemetry
                 })
-        except Exception as e:
+        except Exception:
             pass
         await asyncio.sleep(1.5)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: launch telemetry broadcaster in background
-    task = asyncio.create_task(telemetry_worker())
+    # Startup
+    task = asyncio.create_task(telemetry_stream_worker())
     yield
     # Shutdown
     task.cancel()
+    free_vram()
 
 app = FastAPI(
-    title="AI Voice Agent HUD", 
-    version="2.0.0", 
-    description="Futuristic Voice Assistant Platform with Animated HUD & Action Engine",
+    title="Autonomous AI Voice Agent Backend",
+    version="2.0.0",
+    description="Full-stack AI Voice Assistant with Native App Launching & 3D HUD WebSockets",
     lifespan=lifespan
 )
 
@@ -94,7 +114,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic Schemas
+# ==========================================
+# PYDANTIC SCHEMAS
+# ==========================================
 class ChatRequest(BaseModel):
     prompt: str
     session_id: str = "default"
@@ -102,6 +124,12 @@ class ChatRequest(BaseModel):
     generate_audio: bool = True
     speak_on_server: bool = False
     auto_execute: bool = True
+
+class AppLaunchRequest(BaseModel):
+    app_name: str
+
+class AppCloseRequest(BaseModel):
+    app_name: str
 
 class TTSRequest(BaseModel):
     text: str
@@ -117,29 +145,31 @@ class ConfigUpdateRequest(BaseModel):
     active_persona: str = None
     auto_execute_actions: bool = None
     voice_output_enabled: bool = None
-    theme: str = None
 
-class ActionExecuteRequest(BaseModel):
-    command: str
+# ==========================================
+# REST API ENDPOINTS
+# ==========================================
 
-# API Endpoints
 @app.get("/api/health")
-async def health_check():
-    return {"status": "online", "version": "2.0.0"}
+async def health():
+    return {"status": "online", "version": "2.0.0", "vram_optimized": True}
 
 @app.get("/api/config")
-async def get_config_endpoint():
-    config = load_config()
-    return config
+async def get_config():
+    return load_config()
 
 @app.post("/api/config")
-async def update_config_endpoint(req: ConfigUpdateRequest):
+async def update_config(req: ConfigUpdateRequest):
     config = load_config()
     update_data = req.model_dump(exclude_unset=True)
     config.update(update_data)
     save_config(config)
-    await manager.broadcast({"type": "config_updated", "config": config})
+    await event_bus.broadcast({"type": "config_updated", "config": config})
     return {"status": "success", "config": config}
+
+@app.get("/api/system/stats")
+async def get_stats():
+    return get_detailed_telemetry()
 
 @app.get("/api/voices")
 async def get_voices():
@@ -149,62 +179,67 @@ async def get_voices():
 async def get_personas():
     return {"personas": PERSONAS}
 
-@app.get("/api/models")
-async def get_models():
-    config = load_config()
-    ip = config.get("partner_ip", "192.168.31.48")
-    port = config.get("ollama_port", 11434)
-    status = check_ollama_status(ip, port)
-    return status
+# Action Execution Endpoints
+@app.post("/api/actions/open_app")
+async def api_open_app(req: AppLaunchRequest):
+    res = await asyncio.to_thread(launch_application, req.app_name)
+    await event_bus.emit_action_event("open_app", "success" if res["success"] else "error", res)
+    return res
 
-@app.get("/api/system/stats")
-async def get_stats():
-    return get_system_telemetry()
+@app.post("/api/actions/close_app")
+async def api_close_app(req: AppCloseRequest):
+    res = await asyncio.to_thread(close_application, req.app_name)
+    await event_bus.emit_action_event("close_app", "success" if res["success"] else "error", res)
+    return res
 
-@app.get("/api/sessions")
-async def get_sessions():
-    return {"sessions": list_all_sessions()}
-
-@app.get("/api/sessions/{session_id}")
-async def get_session_history(session_id: str):
-    session = get_session(session_id)
-    return {
-        "session_id": session_id,
-        "messages": session.messages
-    }
+@app.post("/api/actions/lock_screen")
+async def api_lock_screen():
+    res = await asyncio.to_thread(lock_workstation)
+    await event_bus.emit_action_event("lock_screen", "success" if res["success"] else "error", res)
+    return res
 
 @app.post("/api/chat")
-async def chat_endpoint(req: ChatRequest):
-    # Notify clients agent is thinking
-    await manager.broadcast({"type": "agent_state", "state": "thinking"})
+async def chat_handler(req: ChatRequest):
+    """
+    Main LLM processing pipeline:
+    1. Whispers/Prompt passed to LLM Function Calling Engine
+    2. Forces Ollama structured JSON
+    3. Executes native tools (App launching, system controls, diagnostics)
+    4. Generates Kokoro speech
+    5. Broadcasts confirmations over WebSocket Event Bus
+    """
+    await event_bus.emit_state("thinking")
     
-    # Process turn
-    result = await asyncio.to_thread(
-        process_agent_turn,
+    # Process turn with structured function calling
+    turn_result = await asyncio.to_thread(
+        process_function_calling_turn,
         prompt=req.prompt,
-        session_id=req.session_id,
-        persona_id=req.persona_id,
         auto_execute=req.auto_execute
     )
     
-    # Check if actions were executed
-    if result.get("actions"):
-        await manager.broadcast({"type": "agent_state", "state": "executing"})
-        await asyncio.sleep(0.3)
-        
-    # Generate TTS audio if requested
+    # Broadcast action confirmations
+    if turn_result.get("actions"):
+        await event_bus.emit_state("executing")
+        for act in turn_result["actions"]:
+            await event_bus.emit_action_event(
+                action_type=act.get("action_type", "action"),
+                status=act.get("status", "success"),
+                details=act
+            )
+        await asyncio.sleep(0.2)
+
+    # Audio synthesis
     audio_base64 = None
     config = load_config()
     voice = config.get("tts_voice", "af_heart")
     speed = float(config.get("tts_speed", 1.0))
-    
-    if req.generate_audio and result.get("spoken_text"):
-        await manager.broadcast({"type": "agent_state", "state": "speaking"})
-        
-        # Synthesize WAV bytes
+    spoken_text = turn_result.get("spoken_text", "")
+
+    if req.generate_audio and spoken_text:
+        await event_bus.emit_state("speaking")
         wav_bytes = await asyncio.to_thread(
             synthesize_wav_bytes,
-            text=result["spoken_text"],
+            text=spoken_text,
             voice=voice,
             speed=speed
         )
@@ -212,47 +247,42 @@ async def chat_endpoint(req: ChatRequest):
             audio_base64 = base64.b64encode(wav_bytes).decode("utf-8")
             
         if req.speak_on_server:
-            # Play locally in background thread
             asyncio.create_task(asyncio.to_thread(
                 speak_local,
-                text=result["spoken_text"],
+                text=spoken_text,
                 voice=voice,
                 speed=speed
             ))
-            
-    # Return agent back to idle
-    await manager.broadcast({"type": "agent_state", "state": "idle"})
+
+    await event_bus.emit_state("idle")
     
     response_payload = {
-        "text": result["text"],
-        "spoken_text": result["spoken_text"],
-        "actions": result["actions"],
-        "source": result["source"],
-        "message_id": result["message_id"],
-        "timestamp": result["timestamp"],
+        "text": turn_result["text"],
+        "spoken_text": spoken_text,
+        "json_payload": turn_result.get("json_payload"),
+        "actions": turn_result.get("actions", []),
+        "source": turn_result.get("source"),
+        "timestamp": turn_result.get("timestamp"),
         "audio_base64": audio_base64
     }
-    
-    # Broadcast to all connected clients
-    await manager.broadcast({
+
+    await event_bus.broadcast({
         "type": "new_message",
         "session_id": req.session_id,
         "data": response_payload
     })
-    
+
     return response_payload
 
 @app.post("/api/voice/listen")
-async def trigger_listen():
-    """Triggers server microphone listening and transcription."""
-    await manager.broadcast({"type": "agent_state", "state": "listening"})
+async def voice_listen():
+    await event_bus.emit_state("listening")
     text = await asyncio.to_thread(listen_and_transcribe_mic)
-    await manager.broadcast({"type": "agent_state", "state": "idle"})
+    await event_bus.emit_state("idle")
     return {"text": text}
 
 @app.post("/api/voice/tts")
-async def tts_endpoint(req: TTSRequest):
-    """Generates WAV audio for given text and returns as audio/wav response."""
+async def voice_tts(req: TTSRequest):
     wav_bytes = await asyncio.to_thread(
         synthesize_wav_bytes,
         text=req.text,
@@ -260,32 +290,25 @@ async def tts_endpoint(req: TTSRequest):
         speed=req.speed
     )
     if not wav_bytes:
-        raise HTTPException(status_code=500, detail="Voice synthesis failed or voice engine unavailable")
-        
+        raise HTTPException(status_code=500, detail="TTS synthesis failed.")
     return Response(content=wav_bytes, media_type="audio/wav")
 
 @app.post("/api/voice/transcribe")
-async def transcribe_upload(file: UploadFile = File(...)):
-    """Transcribes uploaded audio file from browser."""
+async def voice_transcribe(file: UploadFile = File(...)):
     content = await file.read()
     text = await asyncio.to_thread(transcribe_audio_stream, content)
     return {"text": text}
 
-@app.post("/api/actions/execute")
-async def execute_action_endpoint(req: ActionExecuteRequest):
-    """Executes a custom shell action or tool."""
-    res = await asyncio.to_thread(execute_shell_command, req.command)
-    return res
-
-# WebSocket Hub
+# ==========================================
+# WEBSOCKET EVENT BUS ENDPOINT
+# ==========================================
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    # Send initial welcome state & telemetry
+async def ws_endpoint(ws: WebSocket):
+    await event_bus.connect(ws)
     try:
-        telemetry = get_system_telemetry()
+        telemetry = get_detailed_telemetry()
         config = load_config()
-        await websocket.send_json({
+        await ws.send_json({
             "type": "init",
             "telemetry": telemetry,
             "config": config,
@@ -293,28 +316,31 @@ async def websocket_endpoint(websocket: WebSocket):
         })
         
         while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
+            msg = await ws.receive_json()
+            m_type = msg.get("type")
             
-            if msg_type == "ping":
-                await websocket.send_json({"type": "pong"})
-            elif msg_type == "set_state":
-                state = data.get("state", "idle")
-                await manager.broadcast({"type": "agent_state", "state": state})
+            if m_type == "ping":
+                await ws.send_json({"type": "pong"})
+            elif m_type == "execute_command":
+                prompt = msg.get("prompt", "")
+                if prompt:
+                    res = await asyncio.to_thread(process_function_calling_turn, prompt)
+                    await ws.send_json({"type": "command_result", "data": res})
+            elif m_type == "set_state":
+                await event_bus.emit_state(msg.get("state", "idle"))
                 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
-    except Exception as e:
-        manager.disconnect(websocket)
+        event_bus.disconnect(ws)
+    except Exception:
+        event_bus.disconnect(ws)
 
-# Serve Frontend static assets
+# Serve Static UI
 if STATIC_DIR.exists():
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 @app.get("/")
-async def root_index():
-    index_path = STATIC_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return {"message": "AI Agent Server Online. Frontend files are being initialized."}
-
+async def root():
+    index = STATIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return {"message": "AI Voice Agent Backend Online"}
