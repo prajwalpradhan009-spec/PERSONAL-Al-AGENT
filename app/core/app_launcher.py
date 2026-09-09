@@ -220,3 +220,4 @@ def close_application(app_name: str) -> Dict[str, Any]:
             "terminated_count": 0,
             "error": f"No active process found for '{app_name}'."
         }
+
