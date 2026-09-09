@@ -1,0 +1,15 @@
+{
+    "partner_ip": "192.168.31.48",
+    "ollama_port": 11434,
+    "ollama_model": "MyCustomAI",
+    "tts_voice": "af_heart",
+    "tts_speed": 1.0,
+    "stt_model_size": "base.en",
+    "stt_device": "cpu",
+    "auto_execute_actions": true,
+    "server_host": "127.0.0.1",
+    "server_port": 8000,
+    "active_persona": "jarvis",
+    "voice_output_enabled": true,
+    "theme": "cyberpunk"
+}

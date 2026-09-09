@@ -1,157 +1,92 @@
+"""
+AI Voice Assistant - Standalone CLI Client
+Runs voice conversation directly in the terminal with STT, Ollama / Fallback intelligence, Action Execution, and Kokoro TTS.
+"""
+
 import os
-import re
-import json
-import requests
-import subprocess
-import sounddevice as sd
-import speech_recognition as sr
-from faster_whisper import WhisperModel
-from kokoro import KPipeline
+import sys
+from pathlib import Path
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
-# 🛑 INSERT YOUR PARTNER's IP ADDRESS HERE (The Brain)
-PARTNER_IP = "192.168.31.48"  
-OLLAMA_ENDPOINT = f"http://{PARTNER_IP}:11434/api/generate"
-OLLAMA_MODEL = "MyCustomAI" # Matches your custom personality model!
+# Add project root to path
+ROOT_DIR = Path(__file__).parent.resolve()
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-# Initialize STT (Ears)
-print("Loading STT Model...")
-stt_model = WhisperModel("base.en", device="cpu", compute_type="int8")
-recognizer = sr.Recognizer()
+from app.core.config import load_config, save_config
+from app.core.llm_client import process_agent_turn, check_ollama_status
+from app.core.voice_engine import speak_local, listen_and_transcribe_mic
 
-# Initialize TTS (Voice)
-print("Loading TTS Model...")
-tts_pipeline = KPipeline(lang_code='a')
-
-def listen_and_transcribe() -> str:
-    """The Ears: Records audio from the microphone and transcribes it."""
-    with sr.Microphone() as source:
-        print("\n[🎙️] Listening...")
+def validate_setup(config: dict) -> bool:
+    """Validates Ollama connection and microphone availability."""
+    ip = config.get("partner_ip", "192.168.31.48")
+    port = config.get("ollama_port", 11434)
+    model = config.get("ollama_model", "MyCustomAI")
+    
+    print(f"[🔍] Checking Ollama Brain connection at {ip}:{port}...")
+    status = check_ollama_status(ip, port)
+    if status["online"]:
+        print(f"[✅] Ollama reachable. Available models: {', '.join(status['models']) or 'None'}")
+        if model in status["models"]:
+            print(f"[✅] Active Model '{model}' confirmed.")
+        else:
+            print(f"[⚠️] Model '{model}' not listed. (Will use if available or fallback)")
+    else:
+        print(f"[ℹ️] Ollama server offline or unreachable. Built-in intelligent offline engine will handle tools & queries.")
         
-        recognizer.adjust_for_ambient_noise(source, duration=2) 
-        recognizer.dynamic_energy_threshold = True 
-        
-        try:
-            audio = recognizer.listen(source, timeout=10, phrase_time_limit=8)
-            print("[🧠] Processing audio...")
-            
-            # Save audio temporarily so Whisper can read it
-            with open("temp_audio.wav", "wb") as f:
-                f.write(audio.get_wav_data())
-                
-            # Transcribe with Whisper
-            segments, _ = stt_model.transcribe("temp_audio.wav", beam_size=5)
-            text = "".join([segment.text for segment in segments]).strip()
-            
-            print(f"[🎤] You said: {text}")
-            return text
-            
-        except sr.WaitTimeoutError:
-            return "" # Returns empty if no one speaks
-        except Exception as e:
-            print(f"[❌] Error transcribing: {e}")
-            return ""
-
-def send_to_brain(text: str) -> str:
-    """The Network: Sends the transcribed text to the Ollama server."""
-    print(f"[🌐] Sending to Brain: {text}")
-    
-    payload = {
-        "model": OLLAMA_MODEL, 
-        "prompt": text, 
-        "stream": False
-    }
-    
-    try:
-        response = requests.post(OLLAMA_ENDPOINT, json=payload, timeout=30)
-        response.raise_for_status()
-        return response.json().get("response", "")
-    except Exception as e:
-        print(f"[❌] Network Error: {e}")
-        return "Sorry, something went wrong communicating with the brain."
-
-def parse_and_execute(response_text: str) -> str:
-    """The Hands: Intercepts [ACTION: command] tags, executes them, and cleans the text."""
-    action_pattern = r"\[ACTION:\s*(.+?)\]"
-    actions = re.findall(action_pattern, response_text)
-    
-    for action in actions:
-        print(f"[⚙️] Executing System Command: {action}")
-        try:
-            subprocess.Popen(action, shell=True)
-        except Exception as e:
-            print(f"[❌] Failed to execute {action}: {e}")
-            
-    clean_spoken_text = re.sub(action_pattern, "", response_text).strip()
-    return clean_spoken_text
-
-def speak(text: str):
-    """The Voice: Synthesizes and plays the text out loud."""
-    if not text:
-        return
-        
-    print(f"[🗣️] Speaking: {text}")
-    generator = tts_pipeline(text, voice='af_heart', speed=1.0)
-    
-    for _, _, audio in generator:
-        sd.play(audio, samplerate=24000)
-        sd.wait() 
-
-def validate_setup() -> bool:
-    """Validates that Ollama is reachable and microphone is available."""
-    print("[🔍] Checking Ollama connection...")
-    try:
-        response = requests.get(f"http://{PARTNER_IP}:11434/api/tags", timeout=5)
-        if response.status_code == 200:
-            print(f"[✅] Ollama found at {PARTNER_IP}:11434")
-            models = response.json().get("models", [])
-            model_names = [m.get("name", "") for m in models]
-            if OLLAMA_MODEL in model_names:
-                print(f"[✅] Model '{OLLAMA_MODEL}' is available")
-            else:
-                print(f"[⚠️] Model '{OLLAMA_MODEL}' not found. Available: {model_names}")
-    except Exception as e:
-        print(f"[❌] Ollama not reachable at {OLLAMA_ENDPOINT}")
-        return False
-    
-    print("[🔍] Checking microphone...")
-    try:
-        with sr.Microphone() as source:
-            recognizer.adjust_for_ambient_noise(source, duration=0.1)
-        print("[✅] Microphone is ready")
-    except Exception as e:
-        print(f"[❌] Microphone error: {e}")
-        return False
-    
     return True
 
 def main():
-    print("========================================")
-    print("🤖 Local Assistant 'Face & Hands' Online")
-    print("========================================")
+    config = load_config()
+    voice = config.get("tts_voice", "af_heart")
+    speed = float(config.get("tts_speed", 1.0))
+    persona = config.get("active_persona", "jarvis")
     
-    if not validate_setup():
-        print("\n[🛑] Setup validation failed. Please fix the issues above.")
-        return
+    print("=====================================================")
+    print("🤖 AI Voice Agent CLI Client Online")
+    print(f"   Persona: {persona.upper()} | Voice: {voice} ({speed}x)")
+    print("   Say 'stop listening' or 'shut down' to exit.")
+    print("   Tip: Run 'python run.py' for the Animated Web HUD!")
+    print("=====================================================\n")
     
-    print("\n[🚀] Starting main loop. Say 'stop listening' or 'shut down' to exit.\n")
+    validate_setup(config)
+    
+    print("\n[🎙️] Ears and Voice ready. Listening...\n")
     
     while True:
         try:
-            user_input = listen_and_transcribe()
+            user_input = listen_and_transcribe_mic(timeout=10, phrase_time_limit=8)
             
             if not user_input:
                 continue
                 
-            if "stop listening" in user_input.lower() or "shut down" in user_input.lower():
-                speak("Shutting down the client interface. Goodbye!")
+            p_lower = user_input.lower()
+            if "stop listening" in p_lower or "shut down" in p_lower or "exit assistant" in p_lower:
+                farewell = "Shutting down the assistant client interface. Goodbye!"
+                print(f"[🗣️] {farewell}")
+                speak_local(farewell, voice=voice, speed=speed)
                 break
                 
-            raw_response = send_to_brain(user_input)
-            clean_response = parse_and_execute(raw_response)
-            speak(clean_response)
+            print(f"\n[👤] User: {user_input}")
+            print("[🧠] Thinking & Processing...")
+            
+            result = process_agent_turn(
+                prompt=user_input,
+                session_id="cli_session",
+                persona_id=persona,
+                auto_execute=config.get("auto_execute_actions", True)
+            )
+            
+            # Print actions if executed
+            if result.get("actions"):
+                for act in result["actions"]:
+                    print(f"  [⚙️ Action Executed] {act.get('command')} -> {act.get('status')}")
+                    if act.get("output"):
+                        print(f"    Output: {act['output']}")
+                        
+            spoken = result.get("spoken_text") or result.get("text")
+            print(f"[🤖] Agent: {spoken}\n")
+            
+            speak_local(spoken, voice=voice, speed=speed)
             
         except KeyboardInterrupt:
             print("\n[🛑] Manual termination requested.")

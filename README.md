@@ -1,181 +1,174 @@
-# AI Voice Agent
+# 🤖 AI Voice Agent Platform v2.0 (Jarvis / Cyber Neural HUD)
 
-A voice-enabled AI assistant that listens to user input, processes it through a custom AI model, and responds with synthesized speech. This project combines speech recognition, text-to-speech, and large language models for a seamless conversational experience.
+An autonomous, multi-modal AI Voice Agent equipped with a futuristic animated Web HUD, interactive 3D Neural Orb visualizer, speech recognition (Faster-Whisper), voice synthesis (Kokoro TTS), tool & action execution engine, real-time telemetry streaming, and flexible Ollama LLM connectivity.
 
-## 🎯 Features
+![AI Agent Banner](https://img.shields.io/badge/AI_Agent-v2.0_HUD-00f0ff?style=for-the-badge)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi)
+![Faster Whisper](https://img.shields.io/badge/Faster_Whisper-STT-blue?style=for-the-badge)
+![Kokoro TTS](https://img.shields.io/badge/Kokoro-TTS_Voice-purple?style=for-the-badge)
+![Ollama](https://img.shields.io/badge/Ollama-LLM_Brain-black?style=for-the-badge&logo=ollama)
 
-- **Speech-to-Text (STT)**: Uses Faster Whisper for accurate audio transcription
-- **Text-to-Speech (TTS)**: Kokoro voice synthesis for natural-sounding responses
-- **AI Processing**: Integrates with Ollama for custom AI model responses
-- **Microphone Input**: Real-time audio capture and processing
-- **Ambient Noise Handling**: Automatic adjustment for background noise
+---
+
+## 🌟 Key Features
+
+### 1. 🌌 Animated 3D Neural Orb & Waveform Visualizer
+
+- **Interactive 3D Canvas Sphere**: Over 400 mathematical geodesic particles that rotate, pulse, tilt, and react to mouse hovering, dragging, and shockwave clicks.
+- **Dynamic State Engine**: Visually morphs in real-time between operational states:
+  - 🔵 **IDLE**: Soothing cyan/indigo breathing particle field.
+  - 🟢 **LISTENING**: Real-time microphone audio frequency spectrum flares & glowing acoustic ring.
+  - 🟣 **THINKING / SYNTHESIZING**: High-velocity vortex spinning inward with photon particle trails.
+  - 🟡 **EXECUTING ACTION**: Cybernetic orange/amber energy rings and spark bursts.
+  - ⚪ **SPEAKING**: Resonant harmonic sine waves synchronized to Kokoro synthesized voice.
+
+### 2. ⚙️ Expanded Tool & Action Execution Engine ("The Hands")
+
+The AI Agent can directly execute commands and tools on your Windows machine:
+
+- **Application Launcher**: Open VS Code, Notepad, Calculator, Spotify, Chrome/Edge, File Explorer, Terminal, Task Manager, Settings.
+- **System Telemetry & Health Diagnostics**: Instant CPU usage, RAM utilization, Disk space, Battery percentage, Uptime, and OS details.
+- **Web Search & Navigation**: Direct Google and DuckDuckGo queries, URL navigation in your browser.
+- **File Management & Notes**: Fast note taking to `agent_notes.txt`, directory listing, and workspace inspection.
+- **Custom Shell Execution**: Run PowerShell or Windows commands with live stdout/stderr capture, execution time measurement, and return codes.
+- **Safety Modes**: Toggle between automatic execution or manual approval for commands.
+
+### 3. 🎙️ Dual-Channel Voice & Audio Architecture
+
+- **Speech-to-Text (STT)**: High-speed local `Faster-Whisper` transcription (`base.en` int8) with ambient noise suppression + Web Speech API fallback.
+- **Text-to-Speech (TTS)**: `Kokoro` 82M neural model generating 24 kHz studio-quality audio with switchable voice personas:
+  - `af_heart` (Warm American Female - Default)
+  - `af_bella` (Clear American Female)
+  - `af_nicole` (Soft American Female)
+  - `am_adam` (Deep American Male)
+  - `am_michael` (Crisp American Male)
+  - `bf_emma` (British Female)
+  - `bf_isabella` (British Soft Female)
+- **Audio Output Target**: Stream directly to the web browser with inline audio waveform players or play through local computer speakers via `sounddevice`.
+
+### 4. 🧠 Multi-Turn Intelligence & Personas
+
+- **Ollama Brain Integration**: Seamlessly connect to your partner IP or local Ollama server (`http://<IP>:11434`). Auto-detects installed models.
+- **Built-in Offline Intelligence**: If the Ollama server is offline or unreachable, the agent automatically switches to an internal rule-based intent engine so all system actions, app launches, calculations, and diagnostic queries continue to function without interruption!
+- **Switchable Personas**:
+  - 🤖 **J.A.R.V.I.S.** (Tony Stark's intelligent AI assistant)
+  - ⚡ **NEO-AI** (Cyberpunk neural operator)
+  - 💻 **CodeMaster AI** (Senior engineer and coding copilot)
+  - ✨ **Aura** (Warm, supportive conversational companion)
+
+### 5. 📊 Live System Telemetry HUD Drawer
+
+- Real-time CPU, RAM, Disk, and Network I/O gauges streamed via WebSockets.
+- Battery charging indicator and system uptime timer.
+- Live event console displaying STT logs, prompt latency, tool outputs, and network activities.
+
+---
 
 ## 📁 Project Structure
 
 ```
 AI AGENT/
-├── assistant_client.py      # Main AI agent client with voice I/O
-├── mic_test.py             # Microphone functionality test
-├── test_voice.py           # Text-to-speech voice synthesis test
-├── hello.txt               # Sample text file
-└── README.md              # This file
+├── app/
+│   ├── __init__.py
+│   ├── server.py             # FastAPI backend with WebSockets & REST endpoints
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py         # Persistent configuration & personas
+│   │   ├── telemetry.py      # Real-time system metrics (CPU, RAM, Disk, Net)
+│   │   ├── tools.py          # Action execution engine & app launcher
+│   │   ├── voice_engine.py   # Faster-Whisper STT & Kokoro TTS integration
+│   │   └── llm_client.py     # Ollama client, session memory & offline engine
+│   └── static/
+│       ├── index.html        # Animated Glassmorphic Cyberpunk HUD
+│       ├── css/
+│       │   └── style.css     # Glowing neon aesthetics & responsive layouts
+│       └── js/
+│           ├── orb_visualizer.js   # 3D Canvas particle sphere & waveform visualizer
+│           ├── audio_controller.js # Web Audio API analyzer & speech recording
+│           └── app.js              # State manager, chat feed & WebSocket client
+├── assistant_client.py       # Standalone terminal CLI client
+├── run.py                    # One-click launcher (starts server + opens browser)
+├── mic_test.py               # Microphone diagnostic test
+├── test_voice.py             # TTS speech synthesis test
+├── config.json               # Auto-saved user settings
+└── README.md                 # Project documentation
 ```
-
-## 🔧 Files Description
-
-### `assistant_client.py`
-
-Main application file that orchestrates the entire voice conversation flow:
-
-- **Listen & Transcribe**: Captures audio from microphone and converts to text using Whisper
-- **Process**: Sends transcribed text to Ollama AI model for processing
-- **Respond**: Generates audio response using Kokoro TTS and plays it back
-
-Configuration:
-
-- `PARTNER_IP`: IP address of the Ollama server
-- `OLLAMA_MODEL`: Custom AI model name (e.g., "MyCustomAI")
-
-### `mic_test.py`
-
-Quick diagnostic tool to verify microphone functionality:
-
-- Tests microphone connectivity
-- Performs speech recognition using Google's API
-- Useful for troubleshooting audio input issues
-
-### `test_voice.py`
-
-Voice synthesis test script:
-
-- Tests Kokoro TTS voice generation
-- Plays a sample message through speakers
-- Verifies audio output is working correctly
-
-## 📦 Dependencies
-
-The project requires the following Python packages:
-
-```
-sounddevice          # Audio playback
-speech_recognition   # Microphone input
-faster-whisper       # Speech-to-text (Whisper model)
-kokoro               # Text-to-speech voice synthesis
-requests             # HTTP requests to Ollama
-```
-
-These are typically installed in a virtual environment (`.venv`).
-
-## 🚀 Setup & Installation
-
-1. **Create Virtual Environment** (if not already done):
-
-   ```powershell
-   python -m venv .venv
-   ```
-
-2. **Activate Virtual Environment**:
-
-   ```powershell
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-3. **Install Dependencies**:
-
-   ```bash
-   pip install sounddevice speech_recognition faster-whisper kokoro requests
-   ```
-
-4. **Install Ollama** (AI Model Server):
-   - Download from [ollama.ai](https://ollama.ai)
-   - Install your custom AI model or use a default one
-
-5. **Configure Partner IP**:
-   - Update `PARTNER_IP` in `assistant_client.py` with your Ollama server's IP address
-   - Update `OLLAMA_MODEL` to match your installed model name
-
-## 🎮 Usage
-
-### Run Microphone Test
-
-```powershell
-python mic_test.py
-```
-
-Verify your microphone is working and can capture audio.
-
-### Test Voice Synthesis
-
-```powershell
-python test_voice.py
-```
-
-Check that text-to-speech and audio playback work correctly.
-
-### Run AI Agent
-
-```powershell
-python assistant_client.py
-```
-
-Start the voice-enabled AI assistant. Speak into your microphone, and the AI will respond with synthesized voice.
-
-## ⚙️ Configuration
-
-Edit `assistant_client.py` to customize:
-
-```python
-PARTNER_IP = "192.168.31.48"      # Change to your Ollama server IP
-OLLAMA_ENDPOINT = f"http://{PARTNER_IP}:11434/api/generate"
-OLLAMA_MODEL = "MyCustomAI"         # Change to your model name
-```
-
-## 🔊 Audio Settings
-
-- **Microphone**: Automatically adjusted for ambient noise
-- **TTS Voice**: Default is `'af_heart'` - can be changed in `test_voice.py`
-- **TTS Speed**: Default is `1.0` - adjust for faster/slower speech
-- **Sample Rate**: 24000 Hz for Kokoro audio
-
-## 🐛 Troubleshooting
-
-**Microphone not detected:**
-
-- Run `mic_test.py` to diagnose
-- Check system audio input settings
-
-**Ollama connection error:**
-
-- Verify Ollama is running: `ollama serve`
-- Check `PARTNER_IP` matches your server
-- Ensure port 11434 is accessible
-
-**Whisper model not found:**
-
-- Model will auto-download on first run
-- First run may take several minutes
-
-**Kokoro model download error:**
-
-- First run will download ~82MB model
-- Requires internet connection
-- Subsequent runs will be instant
-
-## 📝 Notes
-
-- Audio processing happens in real-time with dynamic thresholds
-- Temporary audio files are created and should be cleaned up
-- The custom model personality is defined by the Ollama model configuration
-
-## 🎓 Future Enhancements
-
-- Add conversation history/memory
-- Implement conversation context awareness
-- Add support for multiple AI models
-- Create a GUI interface
-- Add logging capabilities
-- Implement error recovery mechanisms
 
 ---
 
-**Built with Whisper, Kokoro, and Ollama** 🤖🎙️
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+- Python 3.10+ (Virtual environment in `.venv`)
+- (Optional) [Ollama](https://ollama.ai) installed locally or on your partner's network machine
+
+### 2. Launch the Animated Web HUD (Recommended)
+
+Run the one-click launcher:
+
+```powershell
+.\.venv\Scripts\python.exe run.py
+```
+
+This starts the FastAPI server and automatically opens **`http://127.0.0.1:8000`** in your browser!
+
+### 3. Run in Terminal CLI Mode (Optional)
+
+If you prefer interacting strictly from the command line:
+
+```powershell
+.\.venv\Scripts\python.exe assistant_client.py
+```
+
+---
+
+## 🎮 How to Use
+
+1. **Voice Interaction**:
+   - Click the **Mic button** (or toggle **Auto Listen**) and speak.
+   - The 3D Neural Orb will illuminate in green during speech, transition to purple while processing, and pulse in cyan while Kokoro synthesizes and speaks the response.
+2. **Text Commands**:
+   - Type in the input box at the bottom and press `Enter`.
+3. **Example Voice & Text Commands**:
+   - `"Open VS Code"`
+   - `"Open Calculator"`
+   - `"Show system specs and memory usage"`
+   - `"Search Google for latest AI news"`
+   - `"Take a note: Meeting tomorrow at 10 AM"`
+   - `"List files in workspace"`
+   - `"What time is it?"`
+   - `"What is 45 * 180 / 3?"`
+4. **Customizing Settings**:
+   - Click the ⚙️ **Settings** button in the header.
+   - Enter your partner's Ollama IP (e.g. `192.168.31.48`), click **Detect Models**, and select your model.
+   - Change your TTS Voice (`af_heart`, `am_adam`, `bf_emma`, etc.) and speech speed.
+   - Save your configuration.
+
+---
+
+## 🔌 API Reference
+
+| Method | Endpoint            | Description                                              |
+| ------ | ------------------- | -------------------------------------------------------- |
+| `GET`  | `/api/health`       | Service health check                                     |
+| `GET`  | `/api/config`       | Retrieve current configuration                           |
+| `POST` | `/api/config`       | Update settings and save to `config.json`                |
+| `GET`  | `/api/system/stats` | Real-time CPU, RAM, Disk, Network telemetry              |
+| `GET`  | `/api/models`       | Check Ollama status and list available models            |
+| `POST` | `/api/chat`         | Send user prompt and receive AI response + actions       |
+| `POST` | `/api/voice/tts`    | Synthesize speech text to WAV audio stream               |
+| `POST` | `/api/voice/listen` | Trigger microphone recording and Whisper STT             |
+| `WS`   | `/ws`               | Real-time bidirectional streaming for states & telemetry |
+
+---
+
+## 🛡️ Technology Stack
+
+- **Backend**: FastAPI, Uvicorn, WebSockets, Pydantic, Psutil
+- **Voice Intelligence**: Faster-Whisper, Kokoro TTS, SoundDevice, SpeechRecognition
+- **Frontend**: HTML5 Canvas 3D Particle Physics, Web Audio API, Modern Glassmorphic CSS3, Marked.js, FontAwesome
+
+---
+
+Enjoy your new AI Voice Assistant Platform! 🚀🤖

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Agent — Neural HUD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="theme-cyberpunk">
+    <!-- Ambient Background Lighting -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+    <div class="grid-overlay"></div>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Header HUD -->
+        <header class="hud-header">
+            <div class="header-left">
+                <div class="brand-badge">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-atom pulse-icon"></i>
+                    </div>
+                    <div class="brand-text">
+                        <span class="brand-title">NEURAL AGENT</span>
+                        <span class="brand-version">v2.0 HUD</span>
+                    </div>
+                </div>
+
+                <!-- Agent Status Pill -->
+                <div class="status-pill status-idle" id="agentStatusPill">
+                    <span class="status-dot"></span>
+                    <span class="status-label" id="agentStatusLabel">IDLE</span>
+                </div>
+
+                <!-- Ollama Connection Pill -->
+                <div class="connection-pill" id="ollamaStatusPill" title="Ollama AI Connection Status">
+                    <i class="fa-solid fa-brain"></i>
+                    <span id="ollamaStatusText">Checking Brain...</span>
+                </div>
+            </div>
+
+            <!-- Header Center: View Switcher -->
+            <div class="view-switcher">
+                <button class="view-btn active" data-view="split" id="viewSplitBtn">
+                    <i class="fa-solid fa-columns"></i>
+                    <span>Split View</span>
+                </button>
+                <button class="view-btn" data-view="orb" id="viewOrbBtn">
+                    <i class="fa-solid fa-circle-nodes"></i>
+                    <span>Neural Core</span>
+                </button>
+                <button class="view-btn" data-view="chat" id="viewChatBtn">
+                    <i class="fa-solid fa-comments"></i>
+                    <span>Conversation</span>
+                </button>
+            </div>
+
+            <!-- Header Right: Quick Controls -->
+            <div class="header-right">
+                <!-- Persona Dropdown -->
+                <div class="custom-select-wrapper">
+                    <select id="personaSelect" class="hud-select" title="Switch AI Persona">
+                        <option value="jarvis">🤖 J.A.R.V.I.S.</option>
+                        <option value="cyberpunk">⚡ NEO-AI (Cyberpunk)</option>
+                        <option value="coder">💻 CodeMaster AI</option>
+                        <option value="companion">✨ Aura (Companion)</option>
+                    </select>
+                </div>
+
+                <!-- Voice Mute / Output Toggle -->
+                <button class="icon-btn" id="voiceMuteBtn" title="Toggle Voice Output (Mute/Unmute)">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+
+                <!-- Telemetry Drawer Toggle -->
+                <button class="icon-btn active" id="telemetryToggleBtn" title="Toggle Telemetry HUD">
+                    <i class="fa-solid fa-chart-line"></i>
+                </button>
+
+                <!-- Settings Button -->
+                <button class="icon-btn" id="settingsBtn" title="System Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace Body -->
+        <main class="hud-main layout-split" id="mainWorkspace">
+            
+            <!-- Left Panel: Conversation Sessions Sidebar (Collapsible) -->
+            <aside class="sidebar-panel" id="sidebarPanel">
+                <div class="sidebar-header">
+                    <button class="new-chat-btn" id="newChatBtn">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>New Session</span>
+                    </button>
+                    <button class="icon-btn-sm" id="collapseSidebarBtn" title="Collapse Sidebar">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                </div>
+
+                <div class="sessions-list" id="sessionsList">
+                    <!-- Session items populated via JS -->
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="quick-tools-title">QUICK ACTIONS</div>
+                    <div class="quick-action-grid">
+                        <button class="tool-chip" data-prompt="Show system specs and usage"><i class="fa-solid fa-microchip"></i> Specs</button>
+                        <button class="tool-chip" data-prompt="Open Calculator"><i class="fa-solid fa-calculator"></i> Calc</button>
+                        <button class="tool-chip" data-prompt="Open VS Code"><i class="fa-solid fa-code"></i> VS Code</button>
+                        <button class="tool-chip" data-prompt="Open Notepad"><i class="fa-solid fa-file-lines"></i> Notes</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Left / Stage: 3D Neural Orb & Visualizer Section -->
+            <section class="orb-stage-section" id="orbStageSection">
+                <div class="orb-stage-card">
+                    <!-- Stage Header / HUD Data -->
+                    <div class="stage-hud-overlay top-left">
+                        <div class="hud-stat-box">
+                            <span class="hud-stat-title">NEURAL LATENCY</span>
+                            <span class="hud-stat-value" id="hudLatency">14ms</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stage-hud-overlay top-right">
+                        <div class="hud-stat-box">
+                            <span class="hud-stat-title">SAMPLING</span>
+                            <span class="hud-stat-value" id="hudSampling">24 kHz Kokoro</span>
+                        </div>
+                    </div>
+
+                    <!-- Canvas 3D Particle Orb -->
+                    <div class="canvas-container" id="canvasContainer">
+                        <canvas id="neuralOrbCanvas"></canvas>
+                        
+                        <!-- Center Core Reticle Rings -->
+                        <div class="reticle-ring ring-outer"></div>
+                        <div class="reticle-ring ring-inner"></div>
+                    </div>
+
+                    <!-- Stage Bottom: Real-time Transcript & State Banner -->
+                    <div class="stage-footer">
+                        <div class="live-transcript-box" id="liveTranscriptBox">
+                            <i class="fa-solid fa-waveform-lines pulse-icon transcript-icon"></i>
+                            <span id="liveTranscriptText">AI Neural Assistant Standby. Click mic or type below...</span>
+                        </div>
+
+                        <!-- Audio Waveform Live Spectrum Bar -->
+                        <div class="waveform-bar-container" id="waveformBarContainer">
+                            <!-- Animated waveform bars dynamically rendered -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Center Right: Conversation & Execution Stream Section -->
+            <section class="chat-section" id="chatSection">
+                <div class="chat-feed-card">
+                    <div class="chat-feed-header">
+                        <div class="feed-title-wrap">
+                            <i class="fa-solid fa-terminal"></i>
+                            <span class="feed-title">ACTION & CONVERSATION LOG</span>
+                        </div>
+                        <div class="feed-actions">
+                            <button class="icon-btn-sm" id="clearChatBtn" title="Clear View">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            <button class="icon-btn-sm" id="exportChatBtn" title="Export Log">
+                                <i class="fa-solid fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Messages Container -->
+                    <div class="messages-container" id="messagesContainer">
+                        <!-- Welcome Message Card -->
+                        <div class="message-card assistant-message">
+                            <div class="message-avatar">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div class="message-body">
+                                <div class="message-header">
+                                    <span class="message-author">J.A.R.V.I.S. Core</span>
+                                    <span class="message-time">Just now</span>
+                                    <span class="source-badge">System Initialized</span>
+                                </div>
+                                <div class="message-text">
+                                    Welcome to the <strong>AI Voice Agent Platform</strong>. All diagnostic systems, Faster-Whisper STT, Kokoro voice synthesis, and system action modules are online.<br><br>
+                                    You can speak naturally, request system actions (e.g. <code>"Open VS Code"</code>, <code>"Check system specs"</code>, <code>"Search Google for..."</code>), or chat with your custom Ollama model.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Telemetry & Inspector Drawer -->
+            <aside class="telemetry-panel" id="telemetryPanel">
+                <div class="telemetry-header">
+                    <div class="telemetry-title">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>SYSTEM TELEMETRY</span>
+                    </div>
+                    <button class="icon-btn-sm" id="closeTelemetryBtn">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="telemetry-body">
+                    <!-- CPU Metric Card -->
+                    <div class="metric-card">
+                        <div class="metric-top">
+                            <span class="metric-label"><i class="fa-solid fa-microchip"></i> CPU Load</span>
+                            <span class="metric-val" id="telemetryCpuVal">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill cpu-fill" id="telemetryCpuBar" style="width: 0%;"></div>
+                        </div>
+                        <div class="metric-sub" id="telemetryCpuSub">Cores: - | Freq: - MHz</div>
+                    </div>
+
+                    <!-- RAM Metric Card -->
+                    <div class="metric-card">
+                        <div class="metric-top">
+                            <span class="metric-label"><i class="fa-solid fa-memory"></i> RAM Usage</span>
+                            <span class="metric-val" id="telemetryRamVal">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill ram-fill" id="telemetryRamBar" style="width: 0%;"></div>
+                        </div>
+                        <div class="metric-sub" id="telemetryRamSub">0 GB / 0 GB</div>
+                    </div>
+
+                    <!-- Disk Metric Card -->
+                    <div class="metric-card">
+                        <div class="metric-top">
+                            <span class="metric-label"><i class="fa-solid fa-hard-drive"></i> Disk Storage</span>
+                            <span class="metric-val" id="telemetryDiskVal">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill disk-fill" id="telemetryDiskBar" style="width: 0%;"></div>
+                        </div>
+                        <div class="metric-sub" id="telemetryDiskSub">0 GB free</div>
+                    </div>
+
+                    <!-- Network Speed Card -->
+                    <div class="metric-card">
+                        <div class="metric-top">
+                            <span class="metric-label"><i class="fa-solid fa-network-wired"></i> Network I/O</span>
+                            <span class="metric-val" id="telemetryNetVal">0 KB/s</span>
+                        </div>
+                        <div class="net-stats-row">
+                            <div class="net-item"><i class="fa-solid fa-arrow-down text-cyan"></i> <span id="telemetryNetDown">0.0 KB/s</span></div>
+                            <div class="net-item"><i class="fa-solid fa-arrow-up text-violet"></i> <span id="telemetryNetUp">0.0 KB/s</span></div>
+                        </div>
+                    </div>
+
+                    <!-- System Info Details -->
+                    <div class="system-info-box">
+                        <div class="info-row">
+                            <span class="info-k">OS</span>
+                            <span class="info-v" id="telemetryOs">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-k">Uptime</span>
+                            <span class="info-v" id="telemetryUptime">-</span>
+                        </div>
+                        <div class="info-row" id="batteryRow" style="display: none;">
+                            <span class="info-k">Battery</span>
+                            <span class="info-v" id="telemetryBattery">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Live Event Activity Stream -->
+                    <div class="telemetry-stream-section">
+                        <div class="stream-title">EVENT STREAM</div>
+                        <div class="event-stream-log" id="eventStreamLog">
+                            <div class="log-line info">[SYS] Telemetry stream initialized.</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Bottom Controls Dock -->
+        <footer class="hud-footer">
+            <div class="controls-dock">
+                <!-- Push to Talk Voice Button -->
+                <div class="mic-button-wrapper">
+                    <button class="hud-mic-btn" id="micBtn" title="Hold or Click to Speak">
+                        <div class="mic-glow-ring"></div>
+                        <i class="fa-solid fa-microphone" id="micBtnIcon"></i>
+                    </button>
+                    <span class="mic-status-tag" id="micStatusTag">PUSH TO TALK</span>
+                </div>
+
+                <!-- Continuous Listening Toggle -->
+                <button class="mode-toggle-btn" id="continuousListenBtn" title="Toggle Auto Voice Detection">
+                    <i class="fa-solid fa-headset"></i>
+                    <span>Auto Listen</span>
+                </button>
+
+                <!-- Text Input Container -->
+                <div class="text-input-wrap">
+                    <input 
+                        type="text" 
+                        id="chatInput" 
+                        class="hud-input" 
+                        placeholder="Speak or type a command... (e.g. 'Open VS Code', 'Check system specs')"
+                        autocomplete="off"
+                    />
+                    <button class="send-btn" id="sendBtn" title="Send (Enter)">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+
+                <!-- Quick TTS Controls -->
+                <div class="dock-quick-tts">
+                    <div class="speed-slider-wrap" title="Speech Speed">
+                        <span class="speed-label"><i class="fa-solid fa-gauge"></i> <span id="speedValText">1.0x</span></span>
+                        <input type="range" id="ttsSpeedSlider" min="0.7" max="1.5" step="0.1" value="1.0" class="hud-slider" />
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-backdrop" id="settingsModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>SYSTEM CONFIGURATION</span>
+                </div>
+                <button class="icon-btn-sm" id="closeSettingsBtn">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Ollama Brain Server Settings -->
+                <div class="settings-group">
+                    <h4 class="settings-group-title"><i class="fa-solid fa-brain"></i> Ollama AI Server (The Brain)</h4>
+                    
+                    <div class="input-grid">
+                        <div class="form-field">
+                            <label>Server IP / Host</label>
+                            <input type="text" id="settingPartnerIp" class="hud-input-sm" placeholder="192.168.31.48 or 127.0.0.1" />
+                        </div>
+                        <div class="form-field">
+                            <label>Port</label>
+                            <input type="number" id="settingOllamaPort" class="hud-input-sm" value="11434" />
+                        </div>
+                    </div>
+
+                    <div class="form-field mt-3">
+                        <div class="field-label-row">
+                            <label>Ollama Model Name</label>
+                            <button class="text-link-btn" id="refreshModelsBtn"><i class="fa-solid fa-rotate"></i> Detect Models</button>
+                        </div>
+                        <input type="text" id="settingOllamaModel" class="hud-input-sm" placeholder="MyCustomAI, llama3, etc." />
+                        <div class="detected-models-chips" id="detectedModelsChips"></div>
+                    </div>
+                </div>
+
+                <!-- Voice & Audio Settings -->
+                <div class="settings-group mt-4">
+                    <h4 class="settings-group-title"><i class="fa-solid fa-waveform"></i> Voice & Synthesis (Kokoro & Whisper)</h4>
+                    
+                    <div class="input-grid">
+                        <div class="form-field">
+                            <label>TTS Voice Persona</label>
+                            <select id="settingVoice" class="hud-select-sm">
+                                <option value="af_heart">Heart (Warm Female, Default)</option>
+                                <option value="af_bella">Bella (Clear Female)</option>
+                                <option value="af_nicole">Nicole (Soft Female)</option>
+                                <option value="af_sarah">Sarah (Energetic Female)</option>
+                                <option value="am_adam">Adam (Deep Male)</option>
+                                <option value="am_michael">Michael (Crisp Male)</option>
+                                <option value="bf_emma">Emma (British Female)</option>
+                                <option value="bf_isabella">Isabella (British Soft)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-field">
+                            <label>Audio Output Target</label>
+                            <select id="settingAudioTarget" class="hud-select-sm">
+                                <option value="browser">Browser WebAudio (Recommended)</option>
+                                <option value="server">Server Speakers (SoundDevice)</option>
+                                <option value="both">Both (Browser + Server)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Safety Settings -->
+                <div class="settings-group mt-4">
+                    <h4 class="settings-group-title"><i class="fa-solid fa-shield-halved"></i> Action Execution Engine</h4>
+                    <div class="checkbox-field">
+                        <label class="switch-container">
+                            <input type="checkbox" id="settingAutoExecute" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+                        <div class="checkbox-text">
+                            <strong>Auto-Execute Actions</strong>
+                            <span>Automatically run approved application launches and system diagnostics commands.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="hud-btn secondary-btn" id="cancelSettingsBtn">Cancel</button>
+                <button class="hud-btn primary-btn" id="saveSettingsBtn"><i class="fa-solid fa-floppy-disk"></i> Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/js/orb_visualizer.js"></script>
+    <script src="/js/audio_controller.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
