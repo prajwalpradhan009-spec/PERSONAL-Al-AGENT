@@ -14,7 +14,7 @@ from app.integrations.registry import has_capability, get_application
 
 # Lazy imports avoid heavy dependency loading at import time (e.g. Playwright).
 def _load_tool_map() -> Dict[str, Dict[str, Callable[..., Dict[str, Any]]]]:
-    from app.integrations import spotify, browser, file_system, windows_control, app_launcher, youtube, github, google, discord
+    from app.integrations import spotify, browser, file_system, windows_control, app_launcher, youtube, github, google, discord, context
 
     return {
         "spotify": {
@@ -100,6 +100,7 @@ def _load_tool_map() -> Dict[str, Dict[str, Callable[..., Dict[str, Any]]]]:
             "bluetooth_status": windows_control.bluetooth_status,
             "battery_info": windows_control.battery_info,
             "monitor_cpu_ram": windows_control.monitor_cpu_ram,
+            "get_location": context.get_user_location,
         },
         "app_launcher": {
             "discover_apps": app_launcher.discover_apps,

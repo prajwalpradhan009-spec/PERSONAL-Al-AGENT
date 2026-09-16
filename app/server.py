@@ -6,6 +6,7 @@ Orchestrates Whisper STT, Kokoro TTS, Ollama Function Calling, Native App Launch
 import os
 import asyncio
 import base64
+import requests
 from pathlib import Path
 from typing import Dict, Any, List, Set, Optional
 from contextlib import asynccontextmanager
@@ -26,6 +27,7 @@ from app.core.task_automation import (
     execute_shell_task
 )
 from app.core.function_calling import process_function_calling_turn, execute_structured_action
+from app.integrations.context import recent_actions_text, get_user_location
 from app.integrations.registry import (
     list_applications,
     get_capabilities,
@@ -82,6 +84,10 @@ class WebSocketEventBus:
         })
 
 event_bus = WebSocketEventBus()
+
+# Per-session conversation memory + last executed actions (for context awareness)
+chat_sessions: Dict[str, List[Dict[str, str]]] = {}
+session_actions: Dict[str, List[str]] = {}
 
 async def telemetry_stream_worker():
     """Background task streaming live telemetry metrics over WebSocket."""
@@ -219,6 +225,23 @@ async def update_config(req: ConfigUpdateRequest):
 async def get_stats():
     return get_detailed_telemetry()
 
+@app.get("/api/models")
+async def api_models():
+    """Ollama status + available models for the HUD 'Brain Online' indicator."""
+    config = load_config()
+    ip = config.get("partner_ip", "127.0.0.1")
+    port = config.get("ollama_port", 11434)
+    try:
+        resp = await asyncio.to_thread(
+            requests.get, f"http://{ip}:{port}/api/tags", timeout=(3.0, 5.0)
+        )
+        if resp.status_code == 200:
+            models = [m.get("name", "") for m in resp.json().get("models", [])]
+            return {"online": True, "count": len(models), "models": models}
+        return {"online": False, "count": 0, "models": []}
+    except Exception:
+        return {"online": False, "count": 0, "models": []}
+
 @app.get("/api/voices")
 async def get_voices():
     return {"voices": AVAILABLE_VOICES}
@@ -291,11 +314,17 @@ async def chat_handler(req: ChatRequest):
     """
     await event_bus.emit_state("thinking")
     
+    # Session history + recently executed tasks give the agent situational awareness
+    sid = req.session_id or "default"
+    history = [{"role": m.get("role"), "content": m.get("content", "")} for m in chat_sessions.get(sid, [])]
+
     # Process turn with structured function calling
     turn_result = await asyncio.to_thread(
         process_function_calling_turn,
         prompt=req.prompt,
-        auto_execute=req.auto_execute
+        history=history,
+        auto_execute=req.auto_execute,
+        context_actions=session_actions.get(sid, []),
     )
     
     # Broadcast action confirmations
@@ -336,13 +365,23 @@ async def chat_handler(req: ChatRequest):
             ))
 
     await event_bus.emit_state("idle")
-    
+
+    # Persist conversation memory + executed task labels for context awareness
+    chat_sessions.setdefault(sid, []).extend([
+        {"role": "user", "content": req.prompt.strip()},
+        {"role": "assistant", "content": spoken_text or ""},
+    ])
+    chat_sessions[sid] = chat_sessions[sid][-12:]
+    session_actions.setdefault(sid, []).extend(recent_actions_text(turn_result.get("actions", [])))
+    session_actions[sid] = session_actions[sid][-12:]
+
     response_payload = {
         "text": turn_result["text"],
         "spoken_text": spoken_text,
         "json_payload": turn_result.get("json_payload"),
         "actions": turn_result.get("actions", []),
         "source": turn_result.get("source"),
+        "session_id": sid,
         "timestamp": turn_result.get("timestamp"),
         "audio_base64": audio_base64
     }

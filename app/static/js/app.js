@@ -485,6 +485,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (typeof cfg.auto_execute_actions === 'boolean') {
             settingAutoExecute.checked = cfg.auto_execute_actions;
+        } else {
+            settingAutoExecute.checked = true;
         }
     }
 

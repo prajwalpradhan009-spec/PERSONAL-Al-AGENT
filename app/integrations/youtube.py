@@ -10,6 +10,7 @@ open_video, play.
 """
 
 import time
+import re
 import webbrowser
 import urllib.parse
 from typing import Dict, Any, List, Optional
@@ -128,6 +129,22 @@ def _iso8601_to_seconds(iso: str) -> int:
     return h * 3600 + m * 60 + s
 
 
+def _resolve_top_video(query: str) -> Optional[str]:
+    """Resolves the first YouTube video for a query WITHOUT requiring an API key."""
+    try:
+        url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
+        resp = requests.get(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+        }, timeout=15)
+        if resp.status_code == 200:
+            match = re.search(r'"videoId":"(\w{11})"', resp.text)
+            if match:
+                return f"https://www.youtube.com/watch?v={match.group(1)}"
+    except Exception:
+        pass
+    return None
+
+
 def search_open_browser(query: str) -> Dict[str, Any]:
     """Opens a YouTube search results page in the default browser."""
     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
@@ -166,12 +183,29 @@ def open_video(video_id: str = None, video_url: str = None, query: str = None) -
 
 
 def play(query: str = None, video_url: str = None) -> Dict[str, Any]:
-    """Plays a video/query: opens it and issues a media-play key."""
-    res = open_video(query=query) if not video_url else open_video(video_url=video_url)
+    """Plays a video/query by opening its watch URL, which autoplays immediately.
+
+    The watch page autoplays the media on load, so no media key is pressed
+    (pressing playpause after load would toggle-pause the new tab).
+    """
+    if not video_url and query:
+        if _youtube_api_key():
+            res = search_videos(query, limit=1)
+            if res.get("success") and res["results"]:
+                video_url = res["results"][0]["url"]
+        if not video_url:
+            video_url = _resolve_top_video(query)
+
+    if not video_url:
+        res = search_open_browser(query)
+        if res.get("success"):
+            return {**res, "output": f"Opened YouTube search for '{query}' (auto-play unavailable, please tap the first video)."}
+        return res
+
+    res = open_video(video_url=video_url)
     if not res.get("success"):
         return res
-    time.sleep(3)
-    press_key("playpause")
+    time.sleep(1.5)
     return {**res, "output": f"Playing on YouTube: {query or video_url}."}
 
 

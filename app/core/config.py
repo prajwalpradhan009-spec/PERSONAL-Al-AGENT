@@ -12,12 +12,12 @@ CONFIG_FILE = Path(__file__).parent.parent.parent / "config.json"
 
 # Founder & User Profile Constants
 USER_PROFILE = {
-    "name": "Prajjwal Pradhan",
-    "title": "Founder",
+    "name": "Prajwal Pradhan",
+    "title": "Sir",
     "education": "BCA Student",
     "role": "Full-Stack Developer & Systems Engineer",
     "notable_projects": ["ShopHub (E-Commerce Platform)", "AI Portfolio Systems", "Neural AI Agent"],
-    "salutation": "Founder Prajjwal",
+    "salutation": " Prajwal",
     "secondary_salutation": "Sir"
 }
 

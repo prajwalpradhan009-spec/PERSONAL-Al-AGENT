@@ -6,7 +6,7 @@
     "tts_speed": 0.9,
     "stt_model_size": "base.en",
     "stt_device": "cpu",
-    "auto_execute_actions": false,
+    "auto_execute_actions": true,
     "server_host": "127.0.0.1",
     "server_port": 8000,
     "active_persona": "jarvis",

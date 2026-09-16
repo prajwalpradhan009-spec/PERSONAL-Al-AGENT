@@ -57,6 +57,7 @@ APPLICATIONS: Dict[str, Dict[str, Any]] = {
             "mouse_click", "mouse_scroll", "clipboard_set", "clipboard_get",
             "set_volume", "get_volume", "get_brightness", "set_brightness",
             "wifi_status", "bluetooth_status", "battery_info", "monitor_cpu_ram",
+            "get_location",
         ],
         "tool_layer": "app.integrations.windows_control",
     },

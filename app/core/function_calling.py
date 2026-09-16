@@ -29,6 +29,7 @@ from app.core.system_control import (
 from app.integrations.dispatcher import execute_tool, get_tool
 from app.integrations.registry import capability_summary_text, credential_status_text, list_applications
 from app.integrations import app_launcher as integration_launcher
+from app.integrations.context import build_context_summary, get_user_location, recent_actions_text
 
 SYSTEM_FUNCTION_CALLING_PROMPT = """You are an autonomous AI Voice Assistant operating on the workstation of Prajwal Pradhan.
 You are a  Full-Stack Developer (creator of ShopHub and advanced AI portfolios).
@@ -299,6 +300,25 @@ def fallback_intent_extractor(prompt: str) -> Dict[str, Any]:
     if "battery" in p and any(k in p for k in ["status", "percent", "level", "how much"]):
         return {"action": "windows_battery", "response": "Checking the battery."}
 
+    # 0h. Location awareness (instant rule - no LLM round-trip)
+    if any(k in p for k in ["where am i", "where are we", "where are we now", "where are we right now", "where is this place", "my location", "my current location", "what is my location", "what's my location", "whats my location", "current location", "where do i live", "where do we live", "whats my address", "what is my address"]):
+        return {"action": "windows_location", "response": "Fetching your current location, Sir."}
+
+    # 0i. Instant greetings (no LLM round-trip keeps replies fast)
+    greeting_core = re.sub(r"[\s,]*\b(sir|jarvis|j.a.r.v.i.s|agent|master|boss|there)$", "", p).strip()
+    if greeting_core in ("hello", "hi", "hey", "yo", "hola", "namaste"):
+        return {"action": "chat", "instant": True, "response": "Hello Sir, how can I assist you today?"}
+    if any(k in p for k in ["how are you", "how's it going", "hows it going", "how are you doing", "whats up", "what's up"]):
+        return {"action": "chat", "instant": True, "response": "All systems are running smoothly, Sir. What would you like me to do for you?"}
+    if any(k in p for k in ["good morning", "good afternoon", "good evening", "good night"]):
+        return {"action": "chat", "instant": True, "response": "Good day, Sir. J.A.R.V.I.S. is at your service."}
+    if any(k in p for k in ["who are you", "what are you", "what can you do", "your name"]):
+        return {"action": "chat", "instant": True, "response": "I am J.A.R.V.I.S., your personal AI voice assistant, Sir. I can open applications, control system volume and windows, check telemetry, play music, and work with Spotify, YouTube, GitHub, Google and Discord, among many other things."}
+    if any(k in p for k in ["what time is it", "what is the time", "whats the time", "current time"]):
+        return {"action": "chat", "instant": True, "response": f"It is {datetime.now().strftime('%I:%M %p')} right now, Sir."}
+    if any(k in p for k in ["what day is it", "what is today", "today's date", "whats the date", "what is the date"]):
+        return {"action": "chat", "instant": True, "response": f"Today is {datetime.now().strftime('%A, %B %d, %Y')}, Sir."}
+
     # 1. Close app
     if p.startswith("close ") or p.startswith("kill ") or p.startswith("quit ") or p.startswith("exit "):
         target = re.sub(r"^(close|kill|quit|exit)\s+", "", p).strip()
@@ -377,12 +397,13 @@ def query_ollama_structured(prompt: str, history: List[Dict[str, str]] = None) -
         "stream": False,
         "options": {
             "temperature": 0.2,
-            "num_predict": 256
+            "num_predict": 256,
+            "num_ctx": 8192
         }
     }
 
     try:
-        resp = requests.post(url, json=payload, timeout=(1.2, 3.0))
+        resp = requests.post(url, json=payload, timeout=(5.0, 120.0))
         if resp.status_code == 200:
             content = resp.json().get("message", {}).get("content", "")
             return extract_json_payload(content)
@@ -399,7 +420,7 @@ def query_ollama_structured(prompt: str, history: List[Dict[str, str]] = None) -
         "stream": False
     }
     try:
-        resp = requests.post(gen_url, json=gen_payload, timeout=(1.2, 3.0))
+        resp = requests.post(gen_url, json=gen_payload, timeout=(5.0, 120.0))
         if resp.status_code == 200:
             content = resp.json().get("response", "")
             return extract_json_payload(content)
@@ -407,6 +428,48 @@ def query_ollama_structured(prompt: str, history: List[Dict[str, str]] = None) -
         pass
 
     return None
+
+
+CHAT_PERSONA_PROMPT = """You are J.A.R.V.I.S., the personal AI voice assistant of Prajwal Pradhan, a full-stack developer (creator of ShopHub). Address him as "Sir". You know the working context below and should reference it when relevant. Answer conversationally, naturally and concisely (2-4 sentences). Plain text only - no JSON, no markdown, no code.
+
+WORKING CONTEXT (who/where/what was done):
+{context}
+"""
+
+
+def query_ollama_chat(prompt: str, history: List[Dict[str, str]] = None, last_actions: List[str] = None) -> str:
+    """
+    Sends a conversational prompt to Ollama and returns a natural plain-text reply.
+    Used only when the deterministic rule engine cannot match an action.
+    """
+    config = load_config()
+    ip = config.get("partner_ip", "127.0.0.1")
+    port = config.get("ollama_port", 11434)
+    model = config.get("ollama_model", "llama3.2:3b")
+
+    context_block = build_context_summary(history, last_actions)
+    system_prompt = CHAT_PERSONA_PROMPT.replace("{context}", context_block)
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        messages.extend(history[-4:])
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+        "options": {"temperature": 0.4, "num_predict": 160, "num_ctx": 4096},
+    }
+
+    try:
+        resp = requests.post(f"http://{ip}:{port}/api/chat", json=payload, timeout=(5.0, 120.0))
+        if resp.status_code == 200:
+            return resp.json().get("message", {}).get("content", "").strip()
+    except Exception:
+        pass
+
+    return ""
 
 # ==========================================================
 # REGISTERED CAPABILITY DISPATCH (principles #2 & #3)
@@ -481,6 +544,7 @@ TOOL_ACTION_MAP = {
     "windows_foreground": ("windows", "foreground_window", []),
     "windows_volume": ("windows", "set_volume", ["level"]),
     "windows_volume_get": ("windows", "get_volume", []),
+    "windows_location": ("windows", "get_location", []),
     "windows_type": ("windows", "keyboard_input", ["text"]),
     "windows_press": ("windows", "press_key", ["key"]),
     "windows_hotkey": ("windows", "hotkey", ["keys"]),
@@ -612,6 +676,23 @@ def execute_structured_action(action_payload: Dict[str, Any], auto_execute: bool
         })
         spoken_response = f"System telemetry: {telemetry_res['summary']}"
 
+    # 4b. Location awareness
+    elif action_type == "windows_location":
+        loc = get_user_location(force=True)
+        if loc.get("success"):
+            parts = [p for p in (loc.get("city"), loc.get("region"), loc.get("country")) if p]
+            spoken_response = f"You are located in {', '.join(parts)}, Sir."
+        else:
+            spoken_response = "I could not determine your location right now, Sir."
+        actions_executed.append({
+            "action_type": "windows_location",
+            "command": "get_user_location",
+            "status": "success" if loc.get("success") else "error",
+            "output": spoken_response,
+            "location": loc,
+            "timestamp": datetime.now().isoformat()
+        })
+
     # 5. Web Search
     elif action_type == "web_search":
         query = action_payload.get("query", "")
@@ -740,21 +821,30 @@ def execute_structured_action(action_payload: Dict[str, Any], auto_execute: bool
 
     return spoken_response, actions_executed
 
-def process_function_calling_turn(prompt: str, history: List[Dict[str, str]] = None, auto_execute: bool = True) -> Dict[str, Any]:
+def process_function_calling_turn(prompt: str, history: List[Dict[str, str]] = None, auto_execute: bool = True, context_actions: List[str] = None) -> Dict[str, Any]:
     """
     Main entry point:
-    1. Queries Ollama for structured JSON action.
-    2. Falls back to semantic intent parser if needed.
+    1. Deterministic semantic parser runs FIRST for instant, reliable local actions
+       (open apps, volume, telemetry, Spotify/YouTube/GitHub/file/window commands).
+    2. ONLY when the rule engine cannot match (generic "chat"), consult Ollama
+       for a natural conversational reply (with location + task context).
     3. Executes the structured action natively on Windows.
     """
-    # 1. Try Ollama JSON Function Calling
-    json_payload = query_ollama_structured(prompt, history)
-    source = "ollama_json"
-    
-    # 2. Fallback to semantic rules
-    if not json_payload:
-        json_payload = fallback_intent_extractor(prompt)
-        source = "rule_engine"
+    # 1. Deterministic semantic parser (instant - no network inference required)
+    json_payload = fallback_intent_extractor(prompt)
+    source = "rule_engine"
+
+    # 2. Unmatched requests -> conversational reply from Ollama
+    if json_payload.get("action") == "chat" and not json_payload.get("instant"):
+        reply = query_ollama_chat(prompt, history, context_actions)
+        if reply:
+            json_payload = {"action": "chat", "response": reply}
+            source = "ollama_chat"
+        else:
+            json_payload = {
+                "action": "chat",
+                "response": f"I'm here, Sir. I can open applications, control volume, check system telemetry, search the web, and manage your files and integrations. You said: '{prompt}'.",
+            }
 
     # 3. Execute action
     spoken_text, actions = execute_structured_action(json_payload, auto_execute=auto_execute)

@@ -254,6 +254,10 @@ def play_spotify(query: str = None, uri: str = None) -> Dict[str, Any]:
         return {"success": False, "error": "Nothing to play. Provide a song, artist or playlist."}
 
     if not is_configured("spotify_client_id"):
+        from app.integrations.youtube import play as youtube_play
+        yt = youtube_play(query=query)
+        if yt.get("success"):
+            return {**yt, "output": f"Spotify API not configured - playing '{query}' on YouTube instead."}
         res = _open_spotify_uri(f"spotify:search:{urllib.parse.quote(query)}")
         return {**res, "output": f"Searching Spotify desktop for '{query}'."} if res.get("success") else res
 
