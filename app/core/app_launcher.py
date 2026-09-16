@@ -55,6 +55,18 @@ KNOWN_APP_MAP: Dict[str, str] = {
     "steam": "steam.exe",
     "obs": "obs64.exe",
     "vlc": "vlc.exe",
+    "xampp": "C:\\xampp\\xampp-control.exe",
+    "xampp control panel": "C:\\xampp\\xampp-control.exe",
+    "xampp control": "C:\\xampp\\xampp-control.exe",
+    "apache": "C:\\xampp\\xampp-control.exe",
+    "mysql": "C:\\xampp\\xampp-control.exe",
+    "docker": "Docker Desktop.exe",
+    "docker desktop": "Docker Desktop.exe",
+    "postman": "Postman.exe",
+    "figma": "Figma.exe",
+    "photoshop": "Photoshop.exe",
+    "git bash": "start \"\" \"C:\\Program Files\\Git\\git-bash.exe\"",
+    "android studio": "studio64.exe",
 }
 
 # Cache for discovered registry applications

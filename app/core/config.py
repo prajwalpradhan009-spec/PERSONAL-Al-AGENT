@@ -22,9 +22,9 @@ USER_PROFILE = {
 }
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "partner_ip": "192.168.31.48",
+    "partner_ip": "127.0.0.1",
     "ollama_port": 11434,
-    "ollama_model": "MyCustomAI",
+    "ollama_model": "llama3.2:3b",
     "tts_voice": "af_heart",
     "tts_speed": 1.0,
     "stt_model_size": "base.en",
@@ -35,7 +35,22 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "active_persona": "jarvis",
     "voice_output_enabled": True,
     "startup_voice_greeting": True,
-    "theme": "cyberpunk"
+    "wake_word_enabled": True,
+    "wake_words": ["hey seri", "hey siri", "hey jarvis", "hey agent", "seri"],
+    "theme": "cyberpunk",
+    "credentials": {
+        "spotify_client_id": "",
+        "spotify_client_secret": "",
+        "spotify_redirect_uri": "",
+        "github_token": "",
+        "github_username": "",
+        "google_client_secrets_path": "",
+        "google_token_path": "",
+        "discord_bot_token": "",
+        "youtube_api_key": "",
+        "browser_channel": "msedge"
+    },
+    "browser_url": "https://www.google.com",
 }
 
 AVAILABLE_VOICES = [
@@ -59,8 +74,8 @@ PERSONAS = {
             "Prajjwal Pradhan is a visionary Founder, BCA student, and Full-Stack Developer who created ShopHub and advanced AI portfolios. "
             "Always address him with respect as 'Founder Prajjwal' or 'Sir'. "
             "You speak concisely, elegantly, and with sharp intelligence. "
-            "When he asks to open applications, run shell tasks, check system diagnostics, or navigate the web, "
-            "integrate native actions and structured commands seamlessly."
+            "When he asks to open applications (like VS Code, Chrome, Spotify, XAMPP), play YouTube videos/music, write code and open it in VS Code, read/write files, adjust volume, lock or control the system, or check hardware telemetry, "
+            "execute structured actions seamlessly."
         )
     },
     "cyberpunk": {

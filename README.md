@@ -78,6 +78,20 @@ AI AGENT/
 │   │   ├── tools.py          # Action execution engine & app launcher
 │   │   ├── voice_engine.py   # Faster-Whisper STT & Kokoro TTS integration
 │   │   └── llm_client.py     # Ollama client, session memory & offline engine
+│   ├── integrations/         # App capability registry + dedicated tool layers
+│   │   ├── __init__.py
+│   │   ├── registry.py       # Application Capability System (APPLICATIONS)
+│   │   ├── dispatcher.py     # (app, capability) -> tool function resolver
+│   │   ├── credentials.py    # Central credential loading from config.json
+│   │   ├── spotify.py        # Spotify Web API OAuth + desktop URI fallback
+│   │   ├── browser.py        # Playwright automation (Chrome/Edge/Firefox)
+│   │   ├── file_system.py    # TXT/PDF/DOCX/XLSX/CSV/JSON/PPTX/ZIP read/create/convert
+│   │   ├── windows_control.py# Windows API window/input/clipboard/volume/brightness
+│   │   ├── app_launcher.py   # Dynamic app discovery (Start Menu + registry)
+│   │   ├── youtube.py        # YouTube Data API v3 + browser fallback
+│   │   ├── github.py         # Official GitHub REST API
+│   │   ├── google.py         # Google Drive / Gmail / Calendar
+│   │   └── discord.py        # Discord bot REST integration
 │   └── static/
 │       ├── index.html        # Animated Glassmorphic Cyberpunk HUD
 │       ├── css/
@@ -156,10 +170,75 @@ If you prefer interacting strictly from the command line:
 | `POST` | `/api/config`       | Update settings and save to `config.json`                |
 | `GET`  | `/api/system/stats` | Real-time CPU, RAM, Disk, Network telemetry              |
 | `GET`  | `/api/models`       | Check Ollama status and list available models            |
+| `GET`  | `/api/capabilities` | Application capability registry (for LLM tool selection) |
+| `POST` | `/api/tool/execute` | Execute `{app, capability, params}` via the dispatcher    |
 | `POST` | `/api/chat`         | Send user prompt and receive AI response + actions       |
 | `POST` | `/api/voice/tts`    | Synthesize speech text to WAV audio stream               |
 | `POST` | `/api/voice/listen` | Trigger microphone recording and Whisper STT             |
 | `WS`   | `/ws`               | Real-time bidirectional streaming for states & telemetry |
+
+---
+
+## 🤖 Application Integration Layer
+
+Every application has a **dedicated tool/integration layer** with granular
+capabilities instead of a generic "openApplication". The agent inspects the
+**Application Capability Registry** (`app/integrations/registry.py`) before
+choosing a tool and executes through the **dispatcher**
+(`app/integrations/dispatcher.py`, REST: `POST /api/tool/execute`).
+
+### Registered applications & capability families
+
+| App key       | Capabilities highlights                                                                |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `spotify`     | open, search, play, pause, resume, next, previous, volume, current_track, playback_state, playlists, add_track_to_playlist, get_devices |
+| `browser`     | open_url, search_web, find_text, click, type, scroll, read_webpage_text, download_file, upload_file, screenshot, page_state (Playwright) |
+| `filesystem`  | search_files, read/pdf/docx/xlsx/csv/json/pptx/zip, create_file, create_csv, create_folder, edit, delete, move, rename, open_file, convert_file, search_inside_files (PDF/DOCX/XLSX/PPTX/ZIP supported) |
+| `windows`     | foreground/minimize/maximize/switch windows, screenshot, keyboard, mouse, clipboard, volume, brightness, wifi/bluetooth status, battery, CPU/RAM |
+| `app_launcher`| dynamic discovery from Registry AppPaths + Start Menu (.lnk), open/close, install hints when not found |
+| `youtube`     | search_videos, search_channel, search_playlist, get_video_info, open_video, play/pause/next/previous |
+| `github`      | get_user, list/create repos, list/create issues, create branch, list commits, create PR, search repos (official REST API) |
+| `google`      | search_drive, create_calendar_event, today_meetings, search_gmail, draft_email, send_email |
+| `discord`     | list_channels, read_messages, search_messages, send_message (bot token, REST)          |
+
+The LLM prompt (`SYSTEM_FUNCTION_CALLING_PROMPT`) is built dynamically with the
+live capability list, so the model picks an exact `(app, capability)` tool
+(`"action": "tool"`) or one of the ~70 convenience actions (e.g. `spotify_play`,
+`youtube_search`, `github_create_pr`).
+
+### Enabling integrations (add to `config.json`)
+
+All credentials live under the `credentials` block. Without a credential, an
+integration falls back to a non-API mode automatically (e.g. Spotify desktop URI
+commands, browser tab opening) instead of failing.
+
+```jsonc
+{
+  "credentials": {
+    "spotify_client_id": "…",          // Web API mode (playback/volume/current track)
+    "spotify_client_secret": "…",      // needed for OAuth token refresh
+    "github_token": "ghp_…",           // full API mode
+    "github_username": "yourname",     // default owner for repo resolution
+    "google_client_secrets_path": "C:\\path\\client_secret.json",  // Drive/Gmail/Calendar
+    "google_token_path": "C:\\path\\token.json",                  // optional, auto-created
+    "discord_bot_token": "…",          // Discord REST via bot
+    "youtube_api_key": "…",            // YouTube Data API v3 (search + metadata)
+    "browser_channel": "msedge"        // Playwright channel: msedge | chrome | firefox | "" (chromium)
+  },
+  "browser_url": "https://www.google.com"
+}
+```
+
+- **Spotify OAuth**: run once — the agent opens a browser for the PKCE flow; then `authenticate_spotify()` → `POST /api/tool/execute` with `{"app":"spotify","capability":"authenticate"}`.
+- **GitHub**: create a PAT at github.com → Settings → Developer settings → Personal access tokens.
+- **Google**: create an OAuth client (Desktop app) in Google Cloud Console and download `client_secret.json`; enable Drive/Gmail/Calendar APIs.
+- **Discord**: create a bot at discord.com/developers and invite it to your server.
+
+### Destructive / sensitive actions
+
+Deleting/moving files, sending email, and sending Discord messages refuse to run
+without explicit confirmation (`"confirm": true`), and the LLM prompt instructs
+the model to only pass confirmation after the user approves.
 
 ---
 

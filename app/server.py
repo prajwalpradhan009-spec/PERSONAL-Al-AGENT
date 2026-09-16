@@ -26,6 +26,13 @@ from app.core.task_automation import (
     execute_shell_task
 )
 from app.core.function_calling import process_function_calling_turn, execute_structured_action
+from app.integrations.registry import (
+    list_applications,
+    get_capabilities,
+    capability_summary_text,
+    credential_status_text,
+)
+from app.integrations.dispatcher import execute_tool, list_tools
 from app.core.voice_engine import (
     synthesize_wav_bytes, 
     speak_local, 
@@ -166,6 +173,12 @@ class AppLaunchRequest(BaseModel):
 class AppCloseRequest(BaseModel):
     app_name: str
 
+class ToolExecuteRequest(BaseModel):
+    app: str
+    capability: str
+    params: Dict[str, Any] = {}
+    auto_execute: bool = True
+
 class TTSRequest(BaseModel):
     text: str
     voice: str = "af_heart"
@@ -213,6 +226,39 @@ async def get_voices():
 @app.get("/api/personas")
 async def get_personas():
     return {"personas": PERSONAS}
+
+# ==========================================
+# INTEGRATION & CAPABILITY REGISTRY
+# ==========================================
+@app.get("/api/capabilities")
+async def api_capabilities():
+    """Returns the full application capability registry for tool selection."""
+    return {
+        "applications": list_applications(),
+        "summary": capability_summary_text(),
+        "credentials": credential_status_text(),
+        "tools": list_tools(),
+    }
+
+@app.get("/api/capabilities/{app_key}")
+async def api_capabilities_for(app_key: str):
+    return {"app": app_key, "capabilities": get_capabilities(app_key)}
+
+@app.post("/api/tool/execute")
+async def api_tool_execute(req: ToolExecuteRequest):
+    """
+    Executes a (app, capability) through the integration dispatcher.
+    The LLM inspects /api/capabilities before choosing the tool.
+    """
+    await event_bus.emit_state("executing")
+    res = await asyncio.to_thread(execute_tool, req.app, req.capability, req.params)
+    await event_bus.emit_action_event(
+        f"{req.app}.{req.capability}",
+        "success" if res.get("success") else "error",
+        res,
+    )
+    await event_bus.emit_state("idle")
+    return res
 
 # Action Execution Endpoints
 @app.post("/api/actions/open_app")
